@@ -1,90 +1,77 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DEPARTMENT_TAGS } from "@/lib/constants";
 
 interface JobFiltersProps {
   currentDepartments: string[];
-  currentCompany: string | null;
-  currentSearch: string;
+  currentCompanies: string[];
   companies: { slug: string; name: string }[];
   basePath?: string;
 }
 
+const Checkmark = () => (
+  <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+    <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const ChevronDown = () => (
+  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-gray-400">
+    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export function JobFilters({
   currentDepartments,
-  currentCompany,
-  currentSearch,
+  currentCompanies,
   companies,
   basePath = "/jobs",
 }: JobFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [open, setOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState(currentSearch);
-  const ref = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const deptRef = useRef<HTMLDivElement>(null);
+  const companyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
+      if (deptRef.current && !deptRef.current.contains(e.target as Node)) {
+        setDeptOpen(false);
+      }
+      if (companyRef.current && !companyRef.current.contains(e.target as Node)) {
+        setCompanyOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Keep local search in sync with URL when navigating
-  useEffect(() => {
-    setSearchValue(currentSearch);
-  }, [currentSearch]);
-
-  const buildUrl = useCallback(
-    (params: {
-      departments?: string[];
-      company?: string | null;
-      q?: string;
-    }) => {
-      const sp = new URLSearchParams();
-      const depts =
-        params.departments !== undefined
-          ? params.departments
-          : currentDepartments;
-      const comp =
-        params.company !== undefined ? params.company : currentCompany;
-      const q = params.q !== undefined ? params.q : currentSearch;
-      depts.forEach((d) => sp.append("department", d));
-      if (comp) sp.set("company", comp);
-      if (q) sp.set("q", q);
-      const qs = sp.toString();
-      return `${basePath}${qs ? `?${qs}` : ""}`;
-    },
-    [currentDepartments, currentCompany, currentSearch, basePath]
-  );
-
-  function navigate(params: {
-    departments?: string[];
-    company?: string | null;
-    q?: string;
-  }) {
-    router.replace(buildUrl(params), { scroll: false });
-  }
-
-  function handleSearchChange(value: string) {
-    setSearchValue(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      navigate({ q: value });
-    }, 300);
+  function replaceParams(key: string, values: string[]) {
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.delete(key);
+    values.forEach((v) => sp.append(key, v));
+    sp.delete("page");
+    const qs = sp.toString();
+    router.replace(`${basePath}${qs ? `?${qs}` : ""}`, { scroll: false });
   }
 
   function toggleDepartment(tag: string) {
-    const next = currentDepartments.includes(tag)
-      ? currentDepartments.filter((d) => d !== tag)
-      : [...currentDepartments, tag];
-    navigate({ departments: next });
+    const current = searchParams.getAll("department");
+    const next = current.includes(tag)
+      ? current.filter((d) => d !== tag)
+      : [...current, tag];
+    replaceParams("department", next);
+  }
+
+  function toggleCompany(slug: string) {
+    const current = searchParams.getAll("company");
+    const next = current.includes(slug)
+      ? current.filter((c) => c !== slug)
+      : [...current, slug];
+    replaceParams("company", next);
   }
 
   const deptLabel =
@@ -94,70 +81,108 @@ export function JobFilters({
         ? currentDepartments[0]
         : `${currentDepartments.length} departments`;
 
+  const companyLabel =
+    currentCompanies.length === 0
+      ? "All Companies"
+      : currentCompanies.length === 1
+        ? companies.find((c) => c.slug === currentCompanies[0])?.name ?? currentCompanies[0]
+        : `${currentCompanies.length} companies`;
+
+  const sortedCompanies = [...companies].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       {/* Department filter */}
-      <div ref={ref} className="relative">
+      <div ref={deptRef} className="relative">
         <button
-          onClick={() => setOpen(!open)}
+          onClick={() => setDeptOpen(!deptOpen)}
           className="flex items-center gap-1.5 rounded border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-400"
         >
           {deptLabel}
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-gray-400">
-            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ChevronDown />
         </button>
-        {open && (
+        {deptOpen && (
           <div className="absolute left-0 top-full z-10 mt-1 w-52 rounded border border-gray-200 bg-white py-1 shadow-sm">
             <button
-              onClick={() => navigate({ departments: [] })}
+              onClick={() => replaceParams("department", [])}
               className="block w-full px-3 py-1.5 text-left text-xs text-gray-500 transition-colors duration-150 hover:bg-gray-50"
             >
               Clear all
             </button>
             <div className="my-1 border-t border-gray-100" />
-            {DEPARTMENT_TAGS.map((tag) => {
-              const checked = currentDepartments.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  onClick={() => toggleDepartment(tag)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors duration-150 hover:bg-gray-50"
-                >
-                  <span
-                    className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border ${
-                      checked
-                        ? "border-black bg-black text-white"
-                        : "border-gray-300"
-                    }`}
+            <div className="max-h-60 overflow-y-auto">
+              {DEPARTMENT_TAGS.map((tag) => {
+                const checked = currentDepartments.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => toggleDepartment(tag)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors duration-150 hover:bg-gray-50"
                   >
-                    {checked && (
-                      <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                        <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </span>
-                  {tag}
-                </button>
-              );
-            })}
+                    <span
+                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+                        checked
+                          ? "border-black bg-black text-white"
+                          : "border-gray-300"
+                      }`}
+                    >
+                      {checked && <Checkmark />}
+                    </span>
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
       {/* Company filter */}
-      <select
-        value={currentCompany ?? ""}
-        onChange={(e) => navigate({ company: e.target.value || null })}
-        className="appearance-none rounded border border-gray-300 bg-white py-2.5 pl-4 pr-9 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1%201L5%205L9%201%22%20stroke%3D%22%239ca3af%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_6px] bg-[position:right_12px_center] bg-no-repeat"
-      >
-        <option value="">All Companies</option>
-        {companies.map((c) => (
-          <option key={c.slug} value={c.slug}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      <div ref={companyRef} className="relative">
+        <button
+          onClick={() => setCompanyOpen(!companyOpen)}
+          className="flex items-center gap-1.5 rounded border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-400"
+        >
+          {companyLabel}
+          <ChevronDown />
+        </button>
+        {companyOpen && (
+          <div className="absolute left-0 top-full z-10 mt-1 w-56 rounded border border-gray-200 bg-white py-1 shadow-sm">
+            <button
+              onClick={() => replaceParams("company", [])}
+              className="block w-full px-3 py-1.5 text-left text-xs text-gray-500 transition-colors duration-150 hover:bg-gray-50"
+            >
+              Clear all
+            </button>
+            <div className="my-1 border-t border-gray-100" />
+            <div className="max-h-60 overflow-y-auto">
+              {sortedCompanies.map((c) => {
+                const checked = currentCompanies.includes(c.slug);
+                return (
+                  <button
+                    key={c.slug}
+                    onClick={() => toggleCompany(c.slug)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors duration-150 hover:bg-gray-50"
+                  >
+                    <span
+                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+                        checked
+                          ? "border-black bg-black text-white"
+                          : "border-gray-300"
+                      }`}
+                    >
+                      {checked && <Checkmark />}
+                    </span>
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

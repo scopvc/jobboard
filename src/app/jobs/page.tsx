@@ -25,8 +25,11 @@ export default async function JobsPage({
       ? [params.department]
       : [];
 
-  const company =
-    typeof params.company === "string" ? params.company : null;
+  const selectedCompanies: string[] = Array.isArray(params.company)
+    ? params.company
+    : typeof params.company === "string"
+      ? [params.company]
+      : [];
   const search = typeof params.q === "string" ? params.q.trim() : "";
   const page = Math.max(1, Number(params.page) || 1);
 
@@ -36,15 +39,14 @@ export default async function JobsPage({
   let query = supabase
     .from("live_jobs")
     .select("*", { count: "exact" })
-    .order("first_seen_at", { ascending: false })
     .order("company_name", { ascending: true })
     .order("title", { ascending: true });
 
   if (departments.length > 0) {
     query = query.in("department_tag", departments);
   }
-  if (company) {
-    query = query.eq("company_slug", company);
+  if (selectedCompanies.length > 0) {
+    query = query.in("company_slug", selectedCompanies);
   }
   if (search) {
     const pattern = `%${search}%`;
@@ -78,7 +80,7 @@ export default async function JobsPage({
   // Build searchParams for pagination
   const paginationParams: Record<string, string> = {};
   if (departments.length > 0) paginationParams.department = departments.join(",");
-  if (company) paginationParams.company = company;
+  if (selectedCompanies.length > 0) paginationParams.company = selectedCompanies.join(",");
   if (search) paginationParams.q = search;
 
   return (
@@ -92,8 +94,7 @@ export default async function JobsPage({
       <div className="mb-6">
         <JobFilters
           currentDepartments={departments}
-          currentCompany={company}
-          currentSearch={search}
+          currentCompanies={selectedCompanies}
           companies={companies}
         />
       </div>
